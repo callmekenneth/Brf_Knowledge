@@ -1,0 +1,18 @@
+
+services:
+  api:
+    build: ./api
+    restart: unless-stopped
+    env_file:
+      - .env.reader
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true

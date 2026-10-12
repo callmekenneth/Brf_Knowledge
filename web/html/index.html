@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BRF Barnängshusen – Kollektivt minne</title>
+<style>
+:root {
+  font-family: system-ui, sans-serif;
+  color: #243448;
+  background: #f3f6f8;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+header {
+  background: #183c4b; color: white;
+  padding: 22px max(20px, calc((100% - 900px)/2));
+}
+header h1 { margin: 0; font-size: 22px; }
+header p { margin: 5px 0 0; opacity: .8; }
+main { max-width: 900px; margin: 32px auto; padding: 0 20px; }
+.panel {
+  background: white; padding: 26px; border-radius: 12px;
+  margin-bottom: 20px; box-shadow: 0 2px 12px #182f4210;
+}
+h2 { font-size: 19px; margin-top: 0; }
+textarea {
+  width: 100%; padding: 14px; border-radius: 8px;
+  border: 1px solid #bdcbd4; font: inherit; resize: vertical;
+}
+button {
+  background: #176b66; color: white; border: 0;
+  padding: 11px 20px; border-radius: 7px;
+  cursor: pointer; font: inherit;
+}
+button:disabled { opacity: .5; cursor: wait; }
+.actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+#status { min-height: 24px; color: #526575; margin-top: 12px; }
+#answer {
+  line-height: 1.65; white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.source {
+  display: block; width: 100%; text-align: left;
+  background: #eef4f4; color: #234b54;
+  margin: 8px 0; padding: 12px;
+}
+.source:hover { background: #dfeceb; }
+#sourceDetail {
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  border-left: 3px solid #176b66;
+  padding: 14px; background: #f5f8f8;
+  line-height: 1.5; margin-top: 14px;
+}
+small { color: #607080; }
+[hidden] { display: none !important; }
+
+#answer p { margin: 0 0 14px; }
+#answer ul, #answer ol { margin: 8px 0 16px; padding-left: 24px; }
+#answer li { margin: 5px 0; }
+#answer h3 { margin: 18px 0 10px; }
+.cite-link {
+  background: #e2f1ee;
+  color: #075c55;
+  padding: 2px 5px;
+  font-size: .85em;
+  font-weight: 600;
+  vertical-align: baseline;
+}
+.cite-link:hover { background: #bce2da; }
+#sourceBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 29, 40, .5);
+  z-index: 100;
+}
+#sourcePanel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(520px, 100%);
+  padding: 24px;
+  background: white;
+  box-shadow: -5px 0 25px #0002;
+  z-index: 101;
+  overflow-y: auto;
+}
+#closeSource { float: right; margin-bottom: 20px; }
+#sourceDetail { clear: both; }
+body.panel-open { overflow: hidden; }
+
+</style>
+</head>
+<body>
+<header>
+  <h1>BRF Barnängshusen</h1>
+  <p>Styrelsens kollektiva minne · Lokal prototyp</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Ställ en fråga om föreningen</h2>
+    <form id="askForm">
+      <textarea id="question" rows="3" minlength="3"
+        maxlength="500" required
+        placeholder="Vad beslutade vi om budgeten för 2026?"></textarea>
+      <div class="actions">
+        <button id="askButton" type="submit">Ställ fråga</button>
+      </div>
+    </form>
+    <div id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" id="resultPanel" hidden>
+    <h2>Svar från BRF Knowledge</h2>
+    <div id="answer"></div>
+    <hr>
+    <h2>Källor</h2>
+    <div id="sources"></div>
+    <div id="sourceBackdrop" hidden></div>
+    <aside id="sourcePanel" role="dialog"
+      aria-modal="true" aria-label="Källtext" hidden>
+      <button id="closeSource" type="button">Stäng ×</button>
+      <div id="sourceDetail"></div>
+    </aside>
+  </section>
+  <small>
+    Prototyp med fem importerade protokoll.
+    AI-genererade svar måste kontrolleras mot originalhandlingarna.
+  </small>
+</main>
+
+<script>
+const form = document.getElementById("askForm");
+const question = document.getElementById("question");
+const button = document.getElementById("askButton");
+const status = document.getElementById("status");
+const panel = document.getElementById("resultPanel");
+const answer = document.getElementById("answer");
+const sources = document.getElementById("sources");
+const detail = document.getElementById("sourceDetail");
+const sourcePanel = document.getElementById("sourcePanel");
+const backdrop = document.getElementById("sourceBackdrop");
+const closeButton = document.getElementById("closeSource");
+let lastFocus = null;
+
+function closeSource() {
+  sourcePanel.hidden = true;
+  backdrop.hidden = true;
+  document.body.classList.remove("panel-open");
+  if (lastFocus?.isConnected) lastFocus.focus();
+}
+
+function openSourcePanel() {
+  lastFocus = document.activeElement;
+  sourcePanel.hidden = false;
+  backdrop.hidden = false;
+  document.body.classList.add("panel-open");
+  closeButton.focus();
+}
+
+closeButton.addEventListener("click", closeSource);
+backdrop.addEventListener("click", closeSource);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && !sourcePanel.hidden) {
+    closeSource();
+  }
+  if (event.key === "Tab" && !sourcePanel.hidden) {
+    const focusable = [...sourcePanel.querySelectorAll("button")];
+    if (!focusable.length) return;
+    event.preventDefault();
+    focusable[0].focus();
+  }
+});
+
+function renderAnswer(text, sourceList) {
+  answer.replaceChildren();
+  const sourceMap = new Map(sourceList.map(s => [s.id, s]));
+
+  function inline(container, value) {
+    const tokens = value.split(/(\*\*[^*]+\*\*|\[K\d+\])/g);
+    for (const token of tokens) {
+      if (token.startsWith("**") && token.endsWith("**")) {
+        const strong = document.createElement("strong");
+        inline(strong, token.slice(2, -2));
+        container.appendChild(strong);
+      } else if (/^\[K\d+\]$/.test(token)) {
+        const id = token.slice(1, -1);
+        const source = sourceMap.get(id);
+        if (source) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "cite-link";
+          button.textContent = token;
+          button.addEventListener("click", () => showSource(source));
+          container.appendChild(button);
+        } else {
+          container.appendChild(document.createTextNode(token));
+        }
+      } else {
+        container.appendChild(document.createTextNode(token));
+      }
+    }
+  }
+
+  let list = null;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      list = null;
+      continue;
+    }
+    const bullet = trimmed.match(/^(?:[-*] |\d+\. )(.*)$/);
+    if (bullet) {
+      if (!list) {
+        list = document.createElement(
+          /^\d+\./.test(trimmed) ? "ol" : "ul"
+        );
+        answer.appendChild(list);
+      }
+      const li = document.createElement("li");
+      inline(li, bullet[1]);
+      list.appendChild(li);
+    } else {
+      list = null;
+      const heading = trimmed.match(/^#{1,3} (.+)$/);
+      const node = document.createElement(heading ? "h3" : "p");
+      inline(node, heading ? heading[1] : trimmed);
+      answer.appendChild(node);
+    }
+  }
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  button.disabled = true;
+  status.textContent = "Söker i protokollen och inväntar Qwen...";
+  panel.hidden = true;
+  answer.textContent = "";
+  sources.replaceChildren();
+  closeSource();
+  const start = performance.now();
+
+  try {
+    const response = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: question.value.trim() })
+    });
+    if (!response.ok) throw new Error("API-fel: " + response.status);
+
+    const data = await response.json();
+    renderAnswer(data.answer || "Inget svar returnerades.", data.sources || []);
+
+    for (const source of (data.sources || [])) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "source";
+      item.textContent =
+        "[" + source.id + "] " + source.title +
+        " · " + source.date + " · Avsnitt " + source.chunk;
+      item.addEventListener("click", () => showSource(source));
+      sources.appendChild(item);
+    }
+    if (!data.sources?.length) {
+      sources.textContent = "Inga källor hittades.";
+    }
+
+    panel.hidden = false;
+    const seconds = ((performance.now() - start) / 1000).toFixed(1);
+    status.textContent = "Klart på " + seconds + " sekunder.";
+  } catch (error) {
+    status.textContent = "Frågan misslyckades: " + error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+async function showSource(source) {
+  openSourcePanel();
+  detail.textContent = "Hämtar källtext...";
+  try {
+    const response = await fetch(
+      "/api/sources/" + encodeURIComponent(source.chunk_id)
+    );
+    if (!response.ok) throw new Error("Källan kunde inte hämtas.");
+    const data = await response.json();
+    detail.textContent =
+      data.title + " · Avsnitt " + data.chunk_number +
+      "\n\n" + data.content;
+  } catch (error) {
+    detail.textContent = error.message;
+  }
+}
+</script>
+</body>
+</html>

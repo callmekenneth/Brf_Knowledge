@@ -20,3 +20,5 @@ data/
 .venv/
 __pycache__/
 .cache/
+
+compose.local.yaml

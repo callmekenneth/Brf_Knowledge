@@ -1,0 +1,25 @@
+name: brf-knowledge
+services:
+  db:
+    image: pgvector/pgvector:0.8.6-pg17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Missing password}
+      POSTGRES_DB: brf_knowledge
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    shm_size: 256mb
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d brf_knowledge"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+volumes:
+  postgres_data:
+networks:
+  backend:
+    internal: true
